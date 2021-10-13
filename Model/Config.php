@@ -3,34 +3,32 @@
  * Copyright © Magento, Inc. All rights reserved.
  * See COPYING.txt for license details.
  */
+
 declare(strict_types=1);
 
 namespace Magento\WebapiAsync\Model;
 
-use Magento\AsynchronousOperations\Model\ConfigInterface;
-use Magento\Framework\Exception\LocalizedException;
-use Magento\Framework\Serialize\SerializerInterface;
 use Magento\Webapi\Model\Cache\Type\Webapi as WebapiCache;
 use Magento\Webapi\Model\Config as WebapiConfig;
+use Magento\Framework\App\ObjectManager;
+use Magento\Framework\Serialize\SerializerInterface;
+use Magento\Framework\Exception\LocalizedException;
 use Magento\Webapi\Model\Config\Converter;
 
-/**
- * Class for accessing to Webapi_Async configuration.
- */
-class Config implements ConfigInterface
+class Config implements \Magento\AsynchronousOperations\Model\ConfigInterface
 {
     /**
-     * @var WebapiCache
+     * @var \Magento\Webapi\Model\Cache\Type\Webapi
      */
     private $cache;
 
     /**
-     * @var WebapiConfig
+     * @var \Magento\Webapi\Model\Config
      */
     private $webApiConfig;
 
     /**
-     * @var SerializerInterface
+     * @var \Magento\Framework\Serialize\SerializerInterface
      */
     private $serializer;
 
@@ -42,22 +40,22 @@ class Config implements ConfigInterface
     /**
      * Initialize dependencies.
      *
-     * @param WebapiCache $cache
-     * @param WebapiConfig $webApiConfig
-     * @param SerializerInterface $serializer
+     * @param \Magento\Webapi\Model\Cache\Type\Webapi $cache
+     * @param \Magento\Webapi\Model\Config $webApiConfig
+     * @param \Magento\Framework\Serialize\SerializerInterface|null $serializer
      */
     public function __construct(
         WebapiCache $cache,
         WebapiConfig $webApiConfig,
-        SerializerInterface $serializer
+        SerializerInterface $serializer = null
     ) {
         $this->cache = $cache;
         $this->webApiConfig = $webApiConfig;
-        $this->serializer = $serializer;
+        $this->serializer = $serializer ? : ObjectManager::getInstance()->get(SerializerInterface::class);
     }
 
     /**
-     * @inheritdoc
+     * {@inheritdoc}
      */
     public function getServices()
     {
@@ -75,30 +73,26 @@ class Config implements ConfigInterface
     }
 
     /**
-     * @inheritdoc
+     * {@inheritdoc}
      */
     public function getTopicName($routeUrl, $httpMethod)
     {
         $services = $this->getServices();
-        $lookupKey = $this->generateLookupKeyByRouteData(
+        $topicName = $this->generateTopicNameByRouteData(
             $routeUrl,
             $httpMethod
         );
 
-        if (array_key_exists($lookupKey, $services) === false) {
+        if (array_key_exists($topicName, $services) === false) {
             throw new LocalizedException(
-                __('WebapiAsync config for "%lookupKey" does not exist.', ['lookupKey' => $lookupKey])
+                __('WebapiAsync config for "%topicName" does not exist.', ['topicName' => $topicName])
             );
         }
 
-        return $services[$lookupKey][self::SERVICE_PARAM_KEY_TOPIC];
+        return $services[$topicName][self::SERVICE_PARAM_KEY_TOPIC];
     }
 
     /**
-     * Generate topic data for all defined services
-     *
-     * Topic data is indexed by a lookup key that is derived from route data
-     *
      * @return array
      */
     private function generateTopicsDataFromWebapiConfig()
@@ -111,18 +105,11 @@ class Config implements ConfigInterface
                     $serviceInterface = $httpMethodData[Converter::KEY_SERVICE][Converter::KEY_SERVICE_CLASS];
                     $serviceMethod = $httpMethodData[Converter::KEY_SERVICE][Converter::KEY_SERVICE_METHOD];
 
-                    $lookupKey = $this->generateLookupKeyByRouteData(
+                    $topicName = $this->generateTopicNameByRouteData(
                         $routeUrl,
                         $httpMethod
                     );
-
-                    $topicName = $this->generateTopicNameFromService(
-                        $serviceInterface,
-                        $serviceMethod,
-                        $httpMethod
-                    );
-
-                    $services[$lookupKey] = [
+                    $services[$topicName] = [
                         self::SERVICE_PARAM_KEY_INTERFACE => $serviceInterface,
                         self::SERVICE_PARAM_KEY_METHOD    => $serviceMethod,
                         self::SERVICE_PARAM_KEY_TOPIC     => $topicName,
@@ -135,7 +122,7 @@ class Config implements ConfigInterface
     }
 
     /**
-     * Generate lookup key name based on route and method
+     * Generate topic name based on service type and method name.
      *
      * Perform the following conversion:
      * self::TOPIC_PREFIX + /V1/products + POST => async.V1.products.POST
@@ -144,41 +131,21 @@ class Config implements ConfigInterface
      * @param string $httpMethod
      * @return string
      */
-    private function generateLookupKeyByRouteData($routeUrl, $httpMethod)
+    private function generateTopicNameByRouteData($routeUrl, $httpMethod)
     {
-        return self::TOPIC_PREFIX . $this->generateKey($routeUrl, $httpMethod, '/', false);
+        return self::TOPIC_PREFIX . $this->generateTopicName($routeUrl, $httpMethod, '/', false);
     }
 
     /**
-     * Generate topic name based on service type and method name.
-     *
-     * Perform the following conversion:
-     * self::TOPIC_PREFIX + Magento\Catalog\Api\ProductRepositoryInterface + save + POST
-     *   => async.magento.catalog.api.productrepositoryinterface.save.POST
-     *
-     * @param string $serviceInterface
-     * @param string $serviceMethod
-     * @param string $httpMethod
-     * @return string
-     */
-    private function generateTopicNameFromService($serviceInterface, $serviceMethod, $httpMethod)
-    {
-        $typeName = strtolower(sprintf('%s.%s', $serviceInterface, $serviceMethod));
-        return strtolower(self::TOPIC_PREFIX . $this->generateKey($typeName, $httpMethod, '\\', false));
-    }
-
-    /**
-     * Join and simplify input type and method into a string that can be used as an array key
-     *
      * @param string $typeName
      * @param string $methodName
      * @param string $delimiter
      * @param bool $lcfirst
      * @return string
      */
-    private function generateKey($typeName, $methodName, $delimiter = '\\', $lcfirst = true)
+    private function generateTopicName($typeName, $methodName, $delimiter = '\\', $lcfirst = true)
     {
-        $parts = explode($delimiter, trim($typeName, $delimiter));
+        $parts = explode($delimiter, ltrim($typeName, $delimiter));
         foreach ($parts as &$part) {
             $part = ltrim($part, ':');
             if ($lcfirst === true) {

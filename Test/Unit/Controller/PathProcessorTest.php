@@ -8,26 +8,14 @@ declare(strict_types=1);
 
 namespace Magento\WebapiAsync\Test\Unit\Controller;
 
-use Magento\Framework\Locale\ResolverInterface;
-use Magento\Store\Api\Data\StoreInterface;
 use Magento\Store\Model\Store;
-use Magento\Store\Model\StoreManagerInterface;
-use Magento\Webapi\Controller\PathProcessor;
-use PHPUnit\Framework\MockObject\MockObject;
-use PHPUnit\Framework\TestCase;
 
-/**
- * Test for Magento\Webapi\Controller\PathProcessor class.
- */
-class PathProcessorTest extends TestCase
+class PathProcessorTest extends \PHPUnit\Framework\TestCase
 {
-    /** @var MockObject|StoreManagerInterface */
+    /** @var \PHPUnit_Framework_MockObject_MockObject | \Magento\Store\Model\StoreManagerInterface */
     private $storeManagerMock;
 
-    /** @var MockObject|ResolverInterface */
-    private $localeResolverMock;
-
-    /** @var PathProcessor */
+    /** @var \Magento\Webapi\Controller\PathProcessor */
     private $model;
 
     /** @var string */
@@ -36,24 +24,18 @@ class PathProcessorTest extends TestCase
     /** @var string */
     private $endpointPath = '/async/V1/path/of/endpoint';
 
-    protected function setUp(): void
+    protected function setUp()
     {
-        $store = $this->getMockForAbstractClass(StoreInterface::class);
-        $store->method('getId')->willReturn(2);
-
-        $this->storeManagerMock = $this->createConfiguredMock(
-            StoreManagerInterface::class,
-            [
-                'getStores' => [$this->arbitraryStoreCode => 'store object', 'default' => 'default store object'],
-                'getStore'  => $store,
-            ]
-        );
-        $this->storeManagerMock->expects($this->once())->method('getStores');
-
-        $this->localeResolverMock = $this->getMockForAbstractClass(ResolverInterface::class);
-        $this->localeResolverMock->method('emulate')->with(2);
-
-        $this->model = new PathProcessor($this->storeManagerMock, $this->localeResolverMock);
+        $this->storeManagerMock = $this->getMockBuilder(\Magento\Store\Model\StoreManagerInterface::class)
+           ->disableOriginalConstructor()
+           ->getMock();
+        $this->storeManagerMock->expects($this->once())
+           ->method('getStores')
+           ->willReturn([
+               $this->arbitraryStoreCode => 'store object',
+               'default' => 'default store object',
+           ]);
+        $this->model = new \Magento\Webapi\Controller\PathProcessor($this->storeManagerMock);
     }
 
     /**
@@ -65,11 +47,11 @@ class PathProcessorTest extends TestCase
      */
     public function testAllStoreCode($storeCodeInPath, $storeCodeSet, $setCurrentStoreCallCtr = 1)
     {
-        $storeCodeInPath = !$storeCodeInPath ?: '/' . $storeCodeInPath; // add leading slash if store code not empty
+        $storeCodeInPath = !$storeCodeInPath ? : '/' . $storeCodeInPath; // add leading slash if store code not empty
         $inPath = 'rest' . $storeCodeInPath . $this->endpointPath;
         $this->storeManagerMock->expects($this->exactly($setCurrentStoreCallCtr))
-            ->method('setCurrentStore')
-            ->with($storeCodeSet);
+           ->method('setCurrentStore')
+           ->with($storeCodeSet);
         $result = $this->model->process($inPath);
         $this->assertSame($this->endpointPath, $result);
     }
